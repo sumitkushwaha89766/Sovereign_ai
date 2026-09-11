@@ -111,6 +111,12 @@ cd frontend
 npm install
 ```
 
+Create `frontend/.env` (Vite does not load `.env.example` automatically):
+```env
+VITE_API_BASE=http://localhost:8000
+VITE_USE_MOCKS=false
+```
+
 ---
 
 ## Running the workbench
@@ -154,11 +160,12 @@ Open: **http://localhost:5173**
 ### Login
 | Username | Password | Role |
 |----------|----------|------|
-| `engineer1` | `demo123` | Engineer (can run agent) |
-| `admin` | `admin` | Admin |
+| `engineer1` | `demo1234` | Engineer (can run agent) |
+| `approver1` | `demo1234` | Approver |
+| `admin1` | `demo1234` | Admin |
 
 ### Step-by-step demo
-1. **Login** as `engineer1 / demo123`
+1. **Login** as `engineer1 / demo1234`
 2. **Upload** `backend/data/sample_docs/inspection_report_892.txt`
 3. **Goal** is pre-filled: *"Assess pump P-204 vibration against SOP-17 and draft an approval note."*
 4. Click **Run agent**

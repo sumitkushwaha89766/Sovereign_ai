@@ -7,17 +7,25 @@ import { MOCK_APPROVALS, mockDecide } from './mocks'
 export async function listPendingApprovals() {
   if (USE_MOCKS) {
     await delay(250)
-    return MOCK_APPROVALS.filter((a) => a.status === 'pending')
+    const items = [...MOCK_APPROVALS]
+    const counts = {
+      total: items.length,
+      pending: items.filter((a) => a.status === 'pending').length,
+      approved: items.filter((a) => a.status === 'approved').length,
+      rejected: items.filter((a) => a.status === 'rejected').length,
+      decided: items.filter((a) => a.status !== 'pending').length,
+    }
+    return { items, counts }
   }
-  // No Phase 4 list endpoint yet — nothing to show in live mode until Phase 7.
-  return []
+  const { data } = await api.get('/approval/queue')
+  return data
 }
 
-export async function decideApproval(approvalId, decision) {
+export async function decideApproval(approvalId, decision, comment) {
   if (USE_MOCKS) {
     await delay(400)
     return mockDecide(approvalId, decision)
   }
-  const { data } = await api.post(`/approval/${approvalId}/decide`, { decision })
+  const { data } = await api.post(`/approval/${approvalId}/decide`, { decision, comment })
   return data // { status, output_file }
 }

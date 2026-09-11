@@ -116,12 +116,16 @@ export default function WorkbenchPage() {
     setSelectedId(doc.document_id)
   }
 
-  async function handleDecide(decision) {
+  async function handleDecide(decision, comment) {
     setApprovalBusy(true)
     try {
-      const result = await decideApproval(run.agent_run_id, decision)
+      const result = await decideApproval(runStatus?.approval_id, decision, comment)
       setApprovalResult(result)
-      setRunStatus((prev) => (prev ? { ...prev, status: result.status } : prev))
+      setRunStatus((prev) => (
+        prev
+          ? { ...prev, status: result.status, approval_status: result.status }
+          : prev
+      ))
     } catch {
       setApprovalResult({ status: 'error', output_file: null })
     } finally {

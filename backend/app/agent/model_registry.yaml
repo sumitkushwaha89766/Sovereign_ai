@@ -12,6 +12,9 @@ models:
   reasoning:
     name: gemma4:e2b
     endpoint: http://localhost:11434
+    fallback:
+      name: qwen2.5:3b
+      endpoint: http://localhost:11434
     note: >-
       TEMPORARY — hardware-constrained (8 GB RAM / 4 GB VRAM). Replace with
       llama3.1:8b or qwen2.5:7b when migrating to stronger hardware.
@@ -19,12 +22,18 @@ models:
   coding:
     name: gemma4:e2b
     endpoint: http://localhost:11434
+    fallback:
+      name: qwen2.5:3b
+      endpoint: http://localhost:11434
     note: >-
       TEMPORARY — replace with qwen2.5-coder:7b later.
 
   vision:
     name: gemma4:e2b
     endpoint: http://localhost:11434
+    fallback:
+      name: qwen2.5:3b
+      endpoint: http://localhost:11434
     note: >-
       TEMPORARY — gemma4:e2b is multimodal so this works, but replace with
       qwen2-vl:7b or llava:7b for stronger document/drawing understanding

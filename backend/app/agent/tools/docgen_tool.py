@@ -113,6 +113,11 @@ class ApprovalNoteInput:
     raised_date: Optional[str] = None    # ISO date; auto-stamped if None
     area_engineer_name: str = PLACEHOLDER
     note_id: Optional[str] = None        # e.g. "AN-AUTO-001"
+    requester_name: str = PLACEHOLDER     # authenticated engineer who raised the request
+    approval_status: str = "pending"
+    approver_name: str = PLACEHOLDER
+    approval_date: Optional[str] = None
+    approval_comment: Optional[str] = None
 
 
 @dataclass
@@ -187,8 +192,8 @@ def generate_approval_note_docx(data: ApprovalNoteInput) -> Path:
     _add_label_value(doc, "Subject",    data.subject)
     _add_label_value(doc, "Equipment",  data.equipment_id)
     _add_label_value(doc, "Date",       stamp_date)
-    _add_label_value(doc, "Raised by",  data.inspector_name)
-    _add_label_value(doc, "Reviewed by", data.area_engineer_name)
+    _add_label_value(doc, "Raised by",  data.requester_name)
+    _add_label_value(doc, "Reviewed by", data.approver_name)
 
     doc.add_paragraph()  # spacer
 
@@ -246,10 +251,18 @@ def generate_approval_note_docx(data: ApprovalNoteInput) -> Path:
 
     # ---- §8 Human Approval Section ----
     doc.add_heading("8.  Approval Decision", level=2)
-    doc.add_paragraph(
-        "[ ]  APPROVED for continued operation under the conditions in §6 above.\n"
-        "[ ]  REJECTED — immediate corrective action required."
-    )
+    approval_status = data.approval_status.lower()
+    if approval_status == "approved":
+        decision_text = "APPROVED for continued operation under the conditions in §6 above."
+    elif approval_status == "rejected":
+        decision_text = "REJECTED — immediate corrective action required."
+    else:
+        decision_text = "PENDING HUMAN APPROVAL"
+    doc.add_paragraph(decision_text)
+    _add_label_value(doc, "Decision by", data.approver_name)
+    _add_label_value(doc, "Decision date", _stamp(data.approval_date))
+    if data.approval_comment:
+        _add_label_value(doc, "Approval comment", data.approval_comment)
     doc.add_paragraph()
     sig_table = doc.add_table(rows=2, cols=2)
     sig_table.style = "Table Grid"

@@ -3,7 +3,6 @@
 // /admin endpoint backs it yet, so live mode shows empty tables.
 import { useEffect, useState } from 'react'
 import { listUsers, listAuditLog } from '../api/admin'
-import { USE_MOCKS } from '../api/client'
 
 const ROLE_TONE = { engineer: 'text-accent', approver: 'text-caution', admin: 'text-nominal' }
 
@@ -35,12 +34,6 @@ export default function AdminPage() {
         <div className="eyebrow">Administration</div>
         <h1 className="text-xl text-text">Users &amp; audit log</h1>
       </div>
-
-      {!USE_MOCKS && (
-        <p className="text-xs text-caution">
-          Live mode: user management and the audit log are demo surfaces; no /admin endpoint exists in Phase 4.
-        </p>
-      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.6fr)]">
         {/* Users */}

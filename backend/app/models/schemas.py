@@ -56,16 +56,43 @@ class AgentRunStatusResponse(BaseModel):
     steps_completed: list[str]
     model_used: dict[str, str]
     evidence: list[Evidence]
+    approval_id: int | None = None
+    approval_status: str | None = None
 
 
 # --- POST /approval/{id}/decide ---
 class ApprovalDecideRequest(BaseModel):
     decision: str  # "approve" | "reject"
+    comment: str | None = None
 
 
 class ApprovalDecideResponse(BaseModel):
     status: str
     output_file: str | None = None
+
+
+class ApprovalQueueItem(BaseModel):
+    approval_id: int
+    agent_run_id: int
+    action: str
+    status: str
+    requested_by: str
+    decided_by: str | None = None
+    decided_at: str | None = None
+    output_file: str | None = None
+
+
+class ApprovalQueueCounts(BaseModel):
+    total: int
+    pending: int
+    approved: int
+    rejected: int
+    decided: int
+
+
+class ApprovalQueueResponse(BaseModel):
+    items: list[ApprovalQueueItem]
+    counts: ApprovalQueueCounts
 
 
 # --- GET /sovereignty/status ---

@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.security import require_roles
+from app.core.audit import record_audit
 from app.db.database import get_db
 from app.models.db_models import Document, User
 from app.models.schemas import DocumentListItem, DocumentUploadResponse
@@ -88,6 +89,12 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
+    record_audit(
+        db,
+        "document_upload",
+        f"{user.username} uploaded {safe_name} as document {doc.id}",
+        user_id=user.id,
+    )
 
     # Write to disk (untrusted data; stored by document_id prefix to avoid collisions).
     os.makedirs(UPLOAD_DIR, exist_ok=True)

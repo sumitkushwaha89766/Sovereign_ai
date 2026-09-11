@@ -11,3 +11,12 @@ export async function getSovereigntyStatus() {
   const { data } = await api.get('/sovereignty/status')
   return data
 }
+
+export async function runSovereigntyProbe() {
+  if (USE_MOCKS) {
+    await delay(300)
+    return { all_blocked: true }
+  }
+  const { data } = await api.post('/sovereignty/probe')
+  return data
+}

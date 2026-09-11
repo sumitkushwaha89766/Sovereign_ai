@@ -70,6 +70,10 @@ from app.agent.tools.docgen_tool import (
     Finding,
     generate_approval_note_docx,
 )
+
+
+class PlannerParseError(ValueError):
+    """Raised when a local model does not return the required structure."""
 from app.rag.retrieve import (
     RetrievalResult,
     retrieve,
@@ -147,6 +151,7 @@ class PlannerResult:
     verification_flags: list[VerificationFlag] = field(default_factory=list)
     output_file: Optional[str] = None          # relative path to the DOCX
     error: Optional[str] = None
+    approval_note: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -345,11 +350,14 @@ def _parse_json_response(text: str) -> dict:
     match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if match:
         try:
-            return json.loads(match.group())
+            parsed = json.loads(match.group())
+            if not isinstance(parsed, dict) or not parsed:
+                raise PlannerParseError("Vision model returned an empty extraction")
+            return parsed
         except json.JSONDecodeError:
             pass
-    logger.warning("PLANNER_PARSE_FAIL | could not extract JSON from model response")
-    return {}
+    logger.error("PLANNER_PARSE_FAILED | could not extract JSON from model response")
+    raise PlannerParseError("Vision model returned invalid JSON")
 
 
 def _parse_reason_response(text: str) -> dict:
@@ -379,6 +387,13 @@ def _parse_reason_response(text: str) -> dict:
     if current and buf:
         _commit(result, current, buf)
 
+    required = ("background", "risk_assessment", "conditions", "recommendation")
+    missing = [key for key in required if not result[key]]
+    if missing:
+        logger.error("PLANNER_PARSE_FAILED | missing reasoning sections=%s", missing)
+        raise PlannerParseError(
+            f"Reasoning model omitted required sections: {', '.join(missing)}"
+        )
     return result
 
 
@@ -415,6 +430,7 @@ class InspectionApprovalPlanner:
         run_id: int,
         document_filename: Optional[str] = None,
         document_path: Optional[Path] = None,
+        requester_name: Optional[str] = None,
     ) -> PlannerResult:
         """Run the full pipeline for one agent run.
 
@@ -517,6 +533,8 @@ class InspectionApprovalPlanner:
                 system=_OCR_SYSTEM,
             )
             extracted = _parse_json_response(ocr_response)
+            if not isinstance(extracted, dict) or not extracted:
+                raise PlannerParseError("Vision model returned an empty extraction")
             result.model_used[STEP_OCR] = vision_decision.model_name
             result.steps_completed.append(STEP_OCR)
             _log_sovereignty("local_model_call", run_id)  # Step 1b vision call
@@ -673,9 +691,29 @@ class InspectionApprovalPlanner:
                 evidence=citations,
                 run_id=run_id,
                 raised_date=date.today().isoformat(),
+                requester_name=requester_name or "[PENDING — requester unavailable]",
                 area_engineer_name="[PENDING — human approval required]",
                 note_id=f"AN-RUN-{run_id}",
             )
+            result.approval_note = {
+                "subject": note_input.subject,
+                "equipment_id": note_input.equipment_id,
+                "inspection_report_id": note_input.inspection_report_id,
+                "inspection_date": note_input.inspection_date,
+                "inspector_name": note_input.inspector_name,
+                "requester_name": note_input.requester_name,
+                "background": note_input.background,
+                "findings": [f.__dict__ for f in note_input.findings],
+                "applicable_sop": note_input.applicable_sop,
+                "risk_assessment": note_input.risk_assessment,
+                "conditions": note_input.conditions,
+                "recommendation": note_input.recommendation,
+                "evidence": [e.__dict__ for e in note_input.evidence],
+                "run_id": note_input.run_id,
+                "raised_date": note_input.raised_date,
+                "area_engineer_name": note_input.area_engineer_name,
+                "note_id": note_input.note_id,
+            }
 
             docx_path = generate_approval_note_docx(note_input)
             result.output_file = str(docx_path)

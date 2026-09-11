@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/app.db"
     vector_db_path: str = "./data/vector_store"
     ollama_host: str = "http://localhost:11434"
+    model_call_timeout_seconds: float = 300.0
+    model_max_output_tokens: int = 2048
 
     # Auth / sandbox.
     # SECURITY: jwt_secret MUST be overridden in .env before any real deployment.

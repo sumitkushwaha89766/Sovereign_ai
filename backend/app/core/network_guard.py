@@ -111,7 +111,12 @@ _original_connect_ex: Optional[object] = None
 # ---------------------------------------------------------------------------
 
 def _is_allowed(host: str | bytes) -> bool:
-    """Return True if *host* resolves to a local / private address."""
+    """Return True only for explicit local hosts or local/private IPs.
+
+    Unknown hostnames are denied without resolving them. Resolving a hostname
+    during the guard decision would create the external DNS request that the
+    guard is meant to prevent.
+    """
     if isinstance(host, bytes):
         host = host.decode("idna", errors="replace")
 
@@ -127,23 +132,8 @@ def _is_allowed(host: str | bytes) -> bool:
     except ValueError:
         pass
 
-    # Hostname that isn't localhost/IP — DNS lookup to check destination IP
-    try:
-        resolved = socket.getaddrinfo.__wrapped__(host, None) if hasattr(
-            socket.getaddrinfo, "__wrapped__"
-        ) else socket.getaddrinfo(host, None)
-        for _family, _type, _proto, _canonname, sockaddr in resolved:
-            ip_str = sockaddr[0]
-            try:
-                addr = ipaddress.ip_address(ip_str)
-                if not any(addr in net for net in _ALLOWED_NETWORKS):
-                    return False
-            except ValueError:
-                return False
-        return True
-    except (socket.gaierror, OSError):
-        # DNS lookup failed — treat as external (could be DNS-over-HTTPS blocking)
-        return False
+    # Do not resolve unknown hostnames here: DNS is an external network path.
+    return False
 
 
 def _extract_host(address) -> str:

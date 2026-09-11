@@ -3,11 +3,11 @@
 // Phase 4 has no list endpoint, so live mode shows an empty queue until Phase 7.
 import { useEffect, useState } from 'react'
 import { listPendingApprovals, decideApproval } from '../api/approval'
-import { USE_MOCKS } from '../api/client'
 import ApprovalModal from '../components/ApprovalModal'
 
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState([])
+  const [counts, setCounts] = useState({ total: 0, pending: 0, approved: 0, rejected: 0, decided: 0 })
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -16,7 +16,11 @@ export default function ApprovalsPage() {
   useEffect(() => {
     let alive = true
     listPendingApprovals()
-      .then((rows) => alive && setApprovals(rows))
+      .then((data) => {
+        if (!alive) return
+        setApprovals(data.items || [])
+        setCounts(data.counts || { total: 0, pending: 0, approved: 0, rejected: 0, decided: 0 })
+      })
       .finally(() => alive && setLoading(false))
     return () => {
       alive = false
@@ -29,7 +33,15 @@ export default function ApprovalsPage() {
     try {
       const res = await decideApproval(active.approval_id, decision)
       setResult(res)
-      setApprovals((prev) => prev.filter((a) => a.approval_id !== active.approval_id))
+      setApprovals((prev) => prev.map((item) => (
+        item.approval_id === active.approval_id ? { ...item, status: res.status } : item
+      )))
+      setCounts((prev) => ({
+        ...prev,
+        pending: Math.max(0, prev.pending - 1),
+        [res.status]: (prev[res.status] || 0) + 1,
+        decided: prev.decided + 1,
+      }))
     } catch {
       setResult({ status: 'error', output_file: null })
     } finally {
@@ -50,12 +62,20 @@ export default function ApprovalsPage() {
         <h1 className="text-xl text-text">Approvals queue</h1>
       </div>
 
-      {!USE_MOCKS && (
-        <p className="text-xs text-caution">
-          Live mode: the pending-approval queue is populated once the Phase 7 agent pipeline runs. Decisions are wired
-          to POST /approval/{'{id}'}/decide.
-        </p>
-      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {[
+          ['Total requests', counts.total],
+          ['In queue', counts.pending],
+          ['Approved', counts.approved],
+          ['Rejected', counts.rejected],
+          ['Completed', counts.decided],
+        ].map(([label, value]) => (
+          <div key={label} className="panel px-3 py-3">
+            <div className="field-label">{label}</div>
+            <div className="mono text-xl text-accent mt-1">{value}</div>
+          </div>
+        ))}
+      </div>
 
       <section className="panel overflow-hidden">
         <div className="grid grid-cols-[80px_1fr_140px_120px] gap-3 px-4 py-2 border-b border-border eyebrow">
@@ -67,7 +87,7 @@ export default function ApprovalsPage() {
         {loading ? (
           <div className="px-4 py-6 text-sm text-muted">Loading…</div>
         ) : approvals.length === 0 ? (
-          <div className="px-4 py-6 text-sm text-muted">No pending approvals.</div>
+          <div className="px-4 py-6 text-sm text-muted">No approval requests yet.</div>
         ) : (
           approvals.map((a) => (
             <div
@@ -78,9 +98,15 @@ export default function ApprovalsPage() {
               <span className="text-sm text-text">{a.action}</span>
               <span className="mono text-sm text-muted">{a.requested_by}</span>
               <div className="text-right">
-                <button className="btn btn-ghost" onClick={() => openItem(a)}>
-                  Review
-                </button>
+                {a.status === 'pending' ? (
+                  <button className="btn btn-ghost" onClick={() => openItem(a)}>
+                    Review
+                  </button>
+                ) : (
+                  <span className={`chip ${a.status === 'approved' ? 'text-nominal' : 'text-trip'}`}>
+                    {a.status}
+                  </span>
+                )}
               </div>
             </div>
           ))

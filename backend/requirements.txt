@@ -5,7 +5,7 @@ python-multipart
 sqlalchemy
 pydantic-settings
 python-jose
-passlib
+bcrypt==4.1.2
 chromadb
 sentence-transformers
 python-docx

@@ -3,7 +3,7 @@
 // has no honest time series to plot. `internet_status: blocked` is the DESIRED state, so
 // it reads as nominal (good) with an LED + label, never color alone.
 import { useEffect, useState } from 'react'
-import { getSovereigntyStatus } from '../api/sovereignty'
+import { getSovereigntyStatus, runSovereigntyProbe } from '../api/sovereignty'
 import KpiTile from '../components/KpiTile'
 import StatusLight from '../components/StatusLight'
 
@@ -11,6 +11,19 @@ export default function SovereigntyDashboard() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const loadStatus = async (probe = false) => {
+    setLoading(true)
+    setError(null)
+    try {
+      if (probe) await runSovereigntyProbe()
+      setData(await getSovereigntyStatus())
+    } catch {
+      setError('Could not verify sovereignty status. Admin role and a running backend are required.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let alive = true
@@ -23,14 +36,26 @@ export default function SovereigntyDashboard() {
     }
   }, [])
 
-  const clean = data?.external_calls === 0
+  const externalCalls = data?.external_calls ?? data?.external_api_calls
+  const clean = externalCalls === 0
   const blocked = data?.internet_status === 'blocked'
+  const probe = data?.last_isolation_probe
 
   return (
     <div className="flex flex-col gap-5">
       <div>
         <div className="eyebrow">Proof of sovereignty</div>
-        <h1 className="text-xl text-text">Sovereignty dashboard</h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-xl text-text">Sovereignty dashboard</h1>
+          <button
+            type="button"
+            className="btn btn-ghost shrink-0"
+            onClick={() => loadStatus(true)}
+            disabled={loading}
+          >
+            {loading ? 'Checking…' : 'Refresh proof'}
+          </button>
+        </div>
       </div>
 
       {loading && <div className="panel p-6 text-sm text-muted">Reading local telemetry…</div>}
@@ -44,7 +69,7 @@ export default function SovereigntyDashboard() {
               <div className="eyebrow">External network calls · since boot</div>
               <div className="flex items-end gap-4 mt-4">
                 <span className={`mono text-7xl leading-none ${clean ? 'text-nominal' : 'text-trip'}`}>
-                  {data.external_calls}
+                  {externalCalls ?? '—'}
                 </span>
                 <StatusLight
                   state={clean ? 'nominal' : 'trip'}
@@ -68,9 +93,12 @@ export default function SovereigntyDashboard() {
               </div>
               <p className="text-sm text-muted mt-4">
                 {blocked
-                  ? 'Outbound network denied by policy. Blocked is the correct, secure state.'
-                  : 'Outbound network is reachable — verify the deployment network policy.'}
+                  ? 'OS-level isolation probe confirmed all monitored cloud targets are unreachable.'
+                  : 'The latest OS-level isolation probe did not prove that all monitored cloud targets are unreachable.'}
               </p>
+              <div className="mono text-xs text-muted mt-2">
+                Blocked attempts: {data.blocked_attempt_count ?? 0}
+              </div>
             </div>
           </div>
 
@@ -113,6 +141,16 @@ export default function SovereigntyDashboard() {
                 The audit log (Admin) records every call and any blocked external attempt.
               </li>
             </ul>
+          </section>
+
+          <section className="panel p-4">
+            <div className="field-label mb-2">Isolation probe</div>
+            <div className="text-sm text-muted">
+              {probe?.proof || 'No OS-level isolation probe has been recorded yet.'}
+            </div>
+            {probe?.timestamp && (
+              <div className="mono text-xs text-muted mt-2">Last checked: {probe.timestamp}</div>
+            )}
           </section>
         </>
       )}

@@ -17,8 +17,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
+from app.core.audit import record_audit
 from app.db.database import SessionLocal, get_db
-from app.models.db_models import AgentRun, Document, User
+from app.models.db_models import ApprovalRequest, AgentRun, Document, User
 from app.models.schemas import (
     AgentRunRequest,
     AgentRunResponse,
@@ -44,6 +45,8 @@ def _run_pipeline(run_id: int, goal: str, document_id: int | None) -> None:
 
     db = SessionLocal()
     try:
+        run = db.get(AgentRun, run_id)
+        requester = db.get(User, run.user_id) if run and run.user_id else None
         # Resolve document text and disk path
         doc_text = ""
         doc_filename = None
@@ -70,13 +73,18 @@ def _run_pipeline(run_id: int, goal: str, document_id: int | None) -> None:
             run_id=run_id,
             document_filename=doc_filename,
             document_path=doc_path,
+            requester_name=requester.username if requester else None,
         )
 
         # Persist results back to AgentRun
-        run = db.get(AgentRun, run_id)
         if run:
             run.status = result.status
             run.task_type = "inspection_approval"
+            requester = db.get(User, run.user_id) if run.user_id else None
+            if result.approval_note is not None:
+                result.approval_note["requester_name"] = (
+                    requester.username if requester else "[PENDING — requester unavailable]"
+                )
             # Serialise full run metadata as JSON in model_used (Text column — no truncation).
             run.model_used = json.dumps({
                 "models": result.model_used,
@@ -101,7 +109,20 @@ def _run_pipeline(run_id: int, goal: str, document_id: int | None) -> None:
                     for r in result.evidence
                 ],
                 "error": result.error,
+                "approval_note": result.approval_note,
             })
+            if result.status == "awaiting_approval":
+                existing_approval = (
+                    db.query(ApprovalRequest)
+                    .filter(ApprovalRequest.agent_run_id == run_id)
+                    .first()
+                )
+                if existing_approval is None:
+                    db.add(ApprovalRequest(
+                        agent_run_id=run_id,
+                        action="Export approval note",
+                        status="pending",
+                    ))
             db.commit()
             logger.info(
                 "AGENT_RUN_UPDATED | run_id=%d | status=%s | flags=%d | rag_chunks=%d | file=%s",
@@ -116,6 +137,12 @@ def _run_pipeline(run_id: int, goal: str, document_id: int | None) -> None:
                 run.status = "failed"
                 run.model_used = json.dumps({"error": str(exc)})
                 db.commit()
+                record_audit(
+                    db,
+                    "agent_run_failed",
+                    f"Agent run {run_id} failed: {exc}",
+                    user_id=run.user_id,
+                )
         except Exception:
             pass
     finally:
@@ -147,6 +174,12 @@ def run_agent(
     db.add(run)
     db.commit()
     db.refresh(run)
+    record_audit(
+        db,
+        "agent_run_started",
+        f"{user.username} started agent run {run.id} for document {payload.document_id}",
+        user_id=user.id,
+    )
 
     background_tasks.add_task(
         _run_pipeline,
@@ -207,9 +240,16 @@ def agent_run_status(
             page=0,
         ))
 
+    approval = (
+        db.query(ApprovalRequest)
+        .filter(ApprovalRequest.agent_run_id == run_id)
+        .first()
+    )
     return AgentRunStatusResponse(
         status=run.status,
         steps_completed=steps_completed,
         model_used=model_used_map,
         evidence=evidence,
+        approval_id=approval.id if approval else None,
+        approval_status=approval.status if approval else None,
     )

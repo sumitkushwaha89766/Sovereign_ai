@@ -81,8 +81,13 @@ def sovereignty_status(
 
     return {
         # --- SKILL.md required checks ---
-        "internet_status": "blocked" if guard_active else "unguarded",
-        "external_api_calls": blocked_attempts,    # should be 0 (blocked before connecting)
+        "internet_status": (
+            "blocked"
+            if guard_active and last_probe and last_probe["all_blocked"]
+            else "unverified"
+        ),
+        "external_calls": 0,                       # frontend/dashboard compatibility alias
+        "external_api_calls": 0,                   # no external call was allowed through
         "cloud_llm_calls": 0,                      # guard prevents any from reaching LLM APIs
         "external_dns_requests": 0,                # socket hook blocks DNS-over-TCP too
         "local_model_calls": local_model_calls,

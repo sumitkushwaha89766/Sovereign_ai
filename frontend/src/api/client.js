@@ -8,7 +8,8 @@ import axios from 'axios'
 export const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
 // Default to mock unless explicitly disabled — Phase 5 works out of the box.
-export const USE_MOCKS = (import.meta.env.VITE_USE_MOCKS ?? 'true') !== 'false'
+const mockMode = import.meta.env.VITE_USE_MOCKS ?? import.meta.env.VITE_USE_MOCK ?? 'true'
+export const USE_MOCKS = mockMode !== 'false'
 
 const TOKEN_KEY = 'sov_token'
 export const getToken = () => localStorage.getItem(TOKEN_KEY)

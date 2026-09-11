@@ -145,3 +145,41 @@ def test_shipped_registry_is_fully_local():
         decision = router.resolve(tt)
         endpoint = decision.endpoint
         assert endpoint == "local" or "localhost" in endpoint or "127.0.0.1" in endpoint
+
+def test_call_disables_thinking_for_structured_output(tmp_path, monkeypatch):
+    path = _write_registry(tmp_path, """
+        models:
+          vision:
+            name: local-vision
+            endpoint: http://localhost:11434
+    """)
+    captured = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"response": "{}"}
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url, json):
+            captured.update(json)
+            return Response()
+
+    monkeypatch.setattr("app.agent.model_router.httpx.Client", Client)
+    router = ModelRouter(registry_path=path)
+    decision, response = router.call(TaskType.VISION, prompt="extract JSON")
+
+    assert decision.success is True
+    assert response == "{}"
+    assert captured["think"] is False

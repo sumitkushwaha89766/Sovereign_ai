@@ -45,6 +45,7 @@ from app.core.network_guard import NetworkGuardMiddleware, install_socket_guard,
 install_socket_guard()
 
 from app.api import (
+    routes_admin,
     routes_agent,
     routes_approval,
     routes_auth,
@@ -130,6 +131,7 @@ app = FastAPI(title="Sovereign AI Workbench", version="0.1.0", lifespan=lifespan
 
 # Mount the API routers (Architecture.md §5 contracts).
 app.include_router(routes_auth.router)
+app.include_router(routes_admin.router)
 app.include_router(routes_documents.router)
 app.include_router(routes_agent.router)
 app.include_router(routes_approval.router)

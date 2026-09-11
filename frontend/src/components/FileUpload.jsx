@@ -32,7 +32,7 @@ export default function FileUpload({ onUploaded, disabled = false }) {
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff"
+          accept=".txt,.pdf,.png,.jpg,.jpeg,.tif,.tiff"
           disabled={disabled || busy}
           onChange={(e) => {
             setFile(e.target.files?.[0] || null)
@@ -45,7 +45,7 @@ export default function FileUpload({ onUploaded, disabled = false }) {
         </button>
       </div>
       <p className="text-xs text-muted">
-        Scanned PDF or image. Contents are processed locally as data — never executed.
+        Text, scanned PDF, or image. Contents are processed locally as data — never executed.
       </p>
       {error && <p className="text-xs text-trip">{error}</p>}
     </div>

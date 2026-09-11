@@ -8,7 +8,8 @@ export async function listUsers() {
     await delay(200)
     return [...MOCK_ADMIN_USERS]
   }
-  return [] // No live /admin/users endpoint in Phase 4.
+  const { data } = await api.get('/admin/users')
+  return data
 }
 
 export async function listAuditLog() {
@@ -16,5 +17,6 @@ export async function listAuditLog() {
     await delay(200)
     return [...MOCK_AUDIT_LOG]
   }
-  return [] // No live /admin/audit endpoint in Phase 4.
+  const { data } = await api.get('/admin/audit')
+  return data
 }

@@ -42,7 +42,7 @@
 - [x] Evidence/citations panel (sourced / low-confidence / unsourced-reasoning states, §9/§16)
 - [x] Approval modal (Approve/Reject + optional comment, §8)
 - [x] Sovereignty Dashboard page (dataviz stat tiles; egress-blocked = nominal)
-- [ ] Verify: all pages render with mock/static data (`npm run build` + `npm run lint`)
+- [x] Verify: all pages render with mock/static data (`npm run build` + `npm run lint`)
 - Additions beyond the 5-surface list:
   - [x] Minimal Admin page (users + audit log) — per user choice + §4.1
   - [x] Approvals queue page (approver/admin pending queue, §8)
@@ -51,7 +51,7 @@
 
 ## Phase 6 — Connect Frontend with Backend
 - [x] Replace mock data with real axios calls to backend endpoints (via `src/api/` mock↔live seam; flip `VITE_USE_MOCKS=false`)
-- [ ] Verify: upload a real PDF, see it in documents list from DB (DB-assigned `document_id`)
+- [x] Verify: upload a real PDF, see it in documents list from DB (DB-assigned `document_id`)
 - Seam / wiring notes:
   - [x] `src/api/` layer: one module per endpoint, `USE_MOCKS` switch, identical shapes both modes
   - [x] JWT stored on login; axios request interceptor attaches Bearer; 401 → logout

@@ -34,6 +34,7 @@ import httpx
 import yaml
 
 from app.agent.task_classifier import TaskType
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class ModelConfig:
     name: str
     endpoint: str
     note: str = ""
+    fallback: Optional[dict[str, str]] = None
 
 
 @dataclass
@@ -108,6 +110,7 @@ def _load_registry(path: Path = _REGISTRY_PATH) -> dict[str, ModelConfig]:
             name=cfg["name"],
             endpoint=cfg["endpoint"],
             note=cfg.get("note", ""),
+            fallback=cfg.get("fallback"),
         )
 
     logger.info(
@@ -243,7 +246,7 @@ class ModelRouter:
         *,
         system: Optional[str] = None,
         images: Optional[list[str]] = None,   # base64-encoded for vision tasks
-        timeout: float = 120.0,
+        timeout: Optional[float] = None,
     ) -> tuple[RoutingDecision, str]:
         """Resolve the model for *task_type* and call Ollama's /api/generate.
 
@@ -274,6 +277,14 @@ class ModelRouter:
             "model": decision.model_name,
             "prompt": prompt,
             "stream": False,
+            # gemma4:e2b can place its entire bounded generation in a thinking
+            # channel, leaving Ollama's `response` empty. The planner requires
+            # the visible response for JSON/labelled-section parsing.
+            "think": False,
+            "options": {
+                "num_predict": settings.model_max_output_tokens,
+                "temperature": 0.1,
+            },
         }
         if system:
             payload["system"] = system
@@ -281,26 +292,62 @@ class ModelRouter:
             payload["images"] = images
 
         url = decision.endpoint.rstrip("/") + "/api/generate"
-        try:
-            with httpx.Client(timeout=timeout) as client:
-                resp = client.post(url, json=payload)
-            resp.raise_for_status()
-            response_text: str = resp.json().get("response", "")
-            decision.success = True
-        except Exception as exc:  # noqa: BLE001
-            decision.success = False
-            decision.error = str(exc)
+        request_timeout = timeout if timeout is not None else settings.model_call_timeout_seconds
+        cfg = self._registry.get(str(task_type))
+        attempts = [(decision.model_name, decision.endpoint)]
+        if cfg and cfg.fallback:
+            fallback_name = cfg.fallback.get("name")
+            fallback_endpoint = cfg.fallback.get("endpoint")
+            if not fallback_name or not fallback_endpoint:
+                raise ValueError(
+                    f"Invalid fallback configuration for task_type='{task_type}'"
+                )
+            _assert_local_endpoint(fallback_endpoint, fallback_name)
+            attempts.append((fallback_name, fallback_endpoint))
+
+        last_error: Exception | None = None
+        response_text = ""
+        for attempt_index, (model_name, endpoint) in enumerate(attempts):
+            payload["model"] = model_name
+            attempt_url = endpoint.rstrip("/") + "/api/generate"
+            for retry_index in range(2):
+                try:
+                    with httpx.Client(timeout=request_timeout) as client:
+                        resp = client.post(attempt_url, json=payload)
+                    resp.raise_for_status()
+                    response_text = resp.json().get("response", "")
+                    decision.success = True
+                    if attempt_index:
+                        decision.fallback_used = True
+                        decision.fallback_reason = str(last_error)
+                        decision.model_name = model_name
+                        decision.endpoint = endpoint
+                        logger.warning(
+                            "MODEL_FALLBACK_USED | task_type=%s | model=%s | error=%s",
+                            decision.task_type, model_name, last_error,
+                        )
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_error = exc
+                    decision.success = False
+                    if retry_index == 0:
+                        logger.warning(
+                            "MODEL_CALL_RETRY | model=%s | task_type=%s | error=%s",
+                            model_name, decision.task_type, exc,
+                        )
+            if decision.success:
+                break
+
+        if not decision.success:
+            decision.error = str(last_error)
             decision.latency_ms = round((time.perf_counter() - t_call) * 1000, 2)
             logger.error(
                 "MODEL_CALL_FAILED | model=%s | task_type=%s | endpoint=%s "
                 "| latency_ms=%.2f | error=%s",
-                decision.model_name,
-                decision.task_type,
-                decision.endpoint,
-                decision.latency_ms,
-                exc,
+                decision.model_name, decision.task_type, decision.endpoint,
+                decision.latency_ms, last_error,
             )
-            raise
+            raise last_error  # type: ignore[misc]
 
         decision.latency_ms = round((time.perf_counter() - t_call) * 1000, 2)
         logger.info(

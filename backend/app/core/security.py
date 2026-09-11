@@ -1,6 +1,6 @@
 """Authentication and authorization primitives (Architecture.md §6).
 
-- Passwords are hashed with bcrypt (passlib).
+- Passwords are hashed with the local bcrypt library.
 - Access tokens are short-lived JWTs (python-jose, HS256) signed with the local
   ``JWT_SECRET``. Nothing here contacts a non-localhost service.
 - RBAC roles are ``engineer`` / ``approver`` / ``admin``, enforced per endpoint via
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -25,7 +25,6 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.models.db_models import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _bearer = HTTPBearer(auto_error=True)
 
 ALGORITHM = "HS256"
@@ -40,11 +39,14 @@ DEMO_USERS = [
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def create_access_token(*, subject: str, role: str) -> str:
